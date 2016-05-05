@@ -4,7 +4,7 @@ import time
 import logging
 
 HOST = ''
-PORT = 8018
+PORT = 12000
 TIMEOUT = 5
 BUF_SIZE = 1024
 
@@ -16,6 +16,7 @@ class WhatsUpServer(threading.Thread):
     global groups
     global group_name
 
+
     def __init__(self, conn, addr):
         threading.Thread.__init__(self)
         self.conn = conn
@@ -23,19 +24,24 @@ class WhatsUpServer(threading.Thread):
         self.ip = self.addr[0]
         self.name = ''
         self.flag = 0
+        self.log = 0
 
     def print_indicator(self, prompt):
-        self.conn.send('%s\n>> ' % (prompt,))
+        print 56
+        self.conn.send('%s' % (prompt,))
+        print 57
 
     def login(self):
+        global ip_names
         logging.info('Connected from: %s:%s' %(self.addr[0], self.addr[1]))
-        msg = '\n## Welcome to WhatsUp\n## Enter `!q` to quit\n'
+        #msg = '\n## Welcome to WhatsUp\n## Enter `!q` to quit\n'
 
         # new user
         print accounts
         if self.ip not in accounts:
-            msg += '## Please enter your name:'
-            self.print_indicator(msg)
+            #msg += '## Please enter your name:'
+            #self.print_indicator(msg)
+            self.print_indicator(self.log)
             accounts[self.ip] = {
                 'name': '',
                 'pass': '',
@@ -46,34 +52,41 @@ class WhatsUpServer(threading.Thread):
                 name = self.conn.recv(BUF_SIZE).strip()
                 if name in messages:
                     self.print_indicator(
-                        '## This name already exists, please try another')
+                        'Username already exists, please try another!')
                 else:
                     break
             accounts[self.ip]['name'] = name
             self.name = name
             logging.info('%s logged as %s' % (self.addr[0], self.name))
             messages[name] = []
-            self.print_indicator('## Hello %s, please enter your password:' % (self.name,))
+            self.print_indicator('Username verified!')
             password = self.conn.recv(BUF_SIZE)
             accounts[self.ip]['pass'] = password.strip()
             self.flag=1
-            self.print_indicator('## Welcome, enjoy your chat')
+            self.log = 1
+            print self.log
+            self.print_indicator('##')
             clients.add((self.conn, self.addr,self.flag))
         else:
             self.name = accounts[self.ip]['name']
-            msg += '## Hello %s, please enter your password:' % (self.name,)
+            print self.log
+            n = self.name
+            #msg += '## Hello %s, please enter your password:' % (self.name,)
             # print accounts
-            self.print_indicator(msg)
+            #self.print_indicator('Purana User, Enter your password!')
+            self.print_indicator(n)
             while 1:
                 password = self.conn.recv(BUF_SIZE).strip()
                 if password != accounts[self.ip]['pass']:
-                    self.print_indicator('## Incorrect password, please enter again')
+                    self.print_indicator('Incorrect password, please enter again')
                 else:
-                    self.print_indicator('## Welcome back, last login: %s' %(accounts[self.ip]['lastlogin'],))
+                    self.print_indicator('Welcome back, last login: %s' %(accounts[self.ip]['lastlogin'],))
                     accounts[self.ip]['lastlogin'] = time.ctime()
                     break
-            self.conn.send(self.show_mentions(self.name))
-        self.broadcast('`%s` is online now' % (self.name,), clients, False)
+            #self.conn.send(self.show_mentions(self.name))
+        ip_names += self.ip+"::"+self.name+"$"
+        print ip_names
+        self.broadcast_online_users('`%s` is online now' % (ip_names,), clients, False)
         onlines[self.name] = self.conn
 
     def logoff(self):
@@ -81,13 +94,10 @@ class WhatsUpServer(threading.Thread):
         print online
         msg=self.name+" is offline now!"
         print msg
-        print "1"
 #        del onlines[self.name]
-        print "2"
         clients.remove((self.conn, self.addr, self.flag))
         #self.broadcast('## `%s` is offline now' %(self.name,), clients)
         for conn, addr, flag in clients:
-            print "22222"
             conn.send(msg)
         #self.broadcast(msg, clients,False)
         self.conn.close()
@@ -97,17 +107,24 @@ class WhatsUpServer(threading.Thread):
         global onlines
         if buf.find('!q') == 0:
             self.logoff()
+        print 11
 
         if buf.find('#') == 0:
+            print 12
             group_keyword = buf.split(' ')[0][1:]
+            print group_keyword
+            print 13
             group_component = group_keyword.split(':')
+            print group_component
 
             # to post in a group
             if len(group_component) == 1:
+                print 14
                 group_name = group_component[0] #ankit 
                 try:
                     msg = '[%s]%s: %s' % (
                         group_name, self.name, buf.split(' ', 1)[1])
+                    print 22
                     print msg
                     self.group_post(group_name, msg)
                 except IndexError:
@@ -115,8 +132,10 @@ class WhatsUpServer(threading.Thread):
 
             # to join / leave a group
             elif len(group_component) == 2: #joining
+                print 16
                 group_name = group_component[0] #group_name=ankit
                 if group_component[1] == 'join':
+                    print 33
                     self.group_join(group_name) #function called group_join to add member
                 elif group_component[1] == 'leave':
                     self.group_leave(group_name)
@@ -151,8 +170,9 @@ class WhatsUpServer(threading.Thread):
     def group_join(self, group_name):
         groups.setdefault(group_name, set())
         groups[group_name].add((self.conn, self.addr,self.flag))
-        self.print_indicator('## You have joined the group `%s`' %
-                             (group_name,))
+        print 44
+        #self.print_indicator('## You have joined the group `%s`' %(group_name,))
+        print 55
 
     def group_leave(self, group_name):
         try:
@@ -183,11 +203,15 @@ class WhatsUpServer(threading.Thread):
         res += '>> '
         return res
 
+    def broadcast_online_users(self, msg, receivers, to_self=True):
+        for conn, addr, flag in receivers:
+            conn.send(msg + '\n>> ')
+
     def broadcast(self, msg, receivers, to_self=True):
         for conn, addr, flag in receivers:
             # if the client is not the current user
             if addr[0] != self.ip and flag==1:
-                conn.send(msg + '\n>> ')
+                conn.send(msg + '>> ')
             # if current user
             else:
                 self.conn.send('>> ') if to_self else self.conn.send('')
@@ -215,6 +239,7 @@ def main():
     global accounts
     global onlines
     global groups
+    global ip_names
 
     # logging setup
     logging.basicConfig(level=logging.INFO,
@@ -227,6 +252,7 @@ def main():
     accounts = {}
     onlines = {}
     groups = {}
+    ip_names=""
 
     # set up socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

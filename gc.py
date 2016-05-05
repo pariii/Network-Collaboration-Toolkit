@@ -4,10 +4,9 @@ import logging
 import sys
 
 HOST = raw_input('enter ip address: ')
-PORT = 8018
+PORT = 12000
 TIMEOUT = 5
 BUF_SIZE = 1024
-
 
 class WhatsUpClient():
 
